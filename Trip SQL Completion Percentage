@@ -1,0 +1,1037 @@
+USE [AVL22_QA]
+GO
+/****** Object:  StoredProcedure [dbo].[CreateTrips]    Script Date: 4/19/2026 1:12:46 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER  PROCEDURE [dbo].[CreateTrips]
+@FromDate DATE,
+@Todate DATE
+AS 
+BEGIN
+	BEGIN TRY
+ BEGIN TRANSACTION;
+  
+SET NOCOUNT ON;
+ 
+
+SET DATEFIRST 7;  -- 0 = Sunday, 1 = Monday, ... like .NET DayOfWeek
+IF OBJECT_ID('tempdb..#TripDetailsProcessingSummary') IS NOT NULL DROP TABLE #TripDetailsProcessingSummary;
+IF OBJECT_ID('tempdb..#TripDetails') IS NOT NULL DROP TABLE #TripDetails;
+IF OBJECT_ID('tempdb..#TripLocalization_Localizations') IS NOT NULL DROP TABLE #TripLocalization_Localizations;
+IF OBJECT_ID('tempdb..#TripProcessingSummary') IS NOT NULL DROP TABLE #TripProcessingSummary;
+IF OBJECT_ID('tempdb..#TripsToCreate') IS NOT NULL DROP TABLE #TripsToCreate;
+IF OBJECT_ID('tempdb..#ExistingTrips') IS NOT NULL DROP TABLE #ExistingTrips;
+IF OBJECT_ID('tempdb..#StartTrips') IS NOT NULL DROP TABLE #StartTrips;
+IF OBJECT_ID('tempdb..#OperationalPlans') IS NOT NULL DROP TABLE #OperationalPlans;
+IF OBJECT_ID('tempdb..#Trips') IS NOT NULL DROP TABLE #Trips;
+IF OBJECT_ID('tempdb..#CrewTrip') IS NOT NULL DROP TABLE #CrewTrip;
+
+CREATE TABLE #OperationalPlans
+(
+    Id                          UNIQUEIDENTIFIER NOT NULL,
+    ReferenceCode               NVARCHAR(200)    NULL,
+    DriverId                    UNIQUEIDENTIFIER NULL,
+    DisposalPointId             UNIQUEIDENTIFIER NULL,
+    WaterSourceId               UNIQUEIDENTIFIER NULL,
+    OvernightPointId            UNIQUEIDENTIFIER NULL,
+    VehicleId                   UNIQUEIDENTIFIER NULL,
+    ContractId                  UNIQUEIDENTIFIER NOT NULL,
+    Status                      INT              NOT NULL,
+    PlanCoverage                FLOAT            NOT NULL,
+    IsDeleted                   BIT              NOT NULL,
+    CreatedDate                 DATETIME2(7)     NOT NULL,
+    CreatedBy                   NVARCHAR(255)    NOT NULL,
+    ModifiedDate                DATETIME2(7)     NULL,
+    ModifiedBy                  NVARCHAR(255)    NULL,
+    TenantId                    UNIQUEIDENTIFIER NOT NULL,
+    EndDate                     DATETIME2(7)     NOT NULL,
+    StartDate                   DATETIME2(7)     NOT NULL,
+    ContractServiceId           UNIQUEIDENTIFIER NULL,
+    TotalTripsCompletionPercentaion DECIMAL(18,2) NOT NULL,
+    TripDurationHours           FLOAT            NOT NULL,
+    ExpectedCoverage            FLOAT            NOT NULL,
+    CountActiveTrip             INT              NOT NULL,
+    SupervisorId                UNIQUEIDENTIFIER NULL,
+    ContractingCompanyId        UNIQUEIDENTIFIER NOT NULL,
+    MonthlyDays                 NVARCHAR(200)    NULL,
+    IsMonthly                   BIT              NOT NULL
+);
+
+CREATE TABLE #Trips
+(
+    Id uniqueidentifier NOT NULL,
+    OperationalPlansId uniqueidentifier NOT NULL,
+    StartTrip datetime2(7) NOT NULL,
+    EndTrip datetime2(7) NOT NULL,
+    CreatedDate datetime2(7) NOT NULL,
+    CreatedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    ModifiedDate datetime2(7) NULL,
+    ModifiedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    IsDeleted bit NOT NULL,
+    TenantId uniqueidentifier NOT NULL,
+    DisposalPointId uniqueidentifier NULL,
+    WaterSourceId uniqueidentifier NULL,
+    DriverId uniqueidentifier NULL,
+    OvernightPointId uniqueidentifier NULL,
+    VehicleId uniqueidentifier NULL,
+    TripDate datetime2(7) NOT NULL,
+    ReferenceCode nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    Status int NOT NULL,
+    SupervisorId uniqueidentifier NULL,
+    OperationManagerId uniqueidentifier NULL,
+    VehicleId1 uniqueidentifier NULL
+);
+
+CREATE TABLE #TripProcessingSummary
+(
+    Id uniqueidentifier NOT NULL,
+    TotalDistance decimal(18,2) NOT NULL,
+    IsWaterUsed bit NOT NULL,
+    ExpectedCovarge float NOT NULL,
+    IsFinalized bit NOT NULL,
+    ActualCovarge float NOT NULL,
+    TripId uniqueidentifier NOT NULL,
+    IsDeleted bit NOT NULL,
+    CreatedDate datetime2(7) NOT NULL,
+    CreatedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    ModifiedDate datetime2(7) NULL,
+    ModifiedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    TenantId uniqueidentifier NOT NULL,
+    ActualEndTrip datetime2(7) NULL,
+    ActualStartTrip datetime2(7) NULL,
+    CompletionPercentage decimal(18,2) NOT NULL,
+    DischargeStatus int NOT NULL,
+    IsBrushUsed bit NOT NULL,
+    Status int NOT NULL,
+    ActualStartTripLatitude float NULL,
+    ActualStartTripLongitude float NULL
+);
+
+CREATE TABLE #TripLocalization_Localizations
+(
+    EntityId uniqueidentifier NOT NULL,
+    LanguageLocale varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    Description nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    Id int IDENTITY(1,1) NOT NULL,
+    CreatedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    CreatedDate datetime2(7) NOT NULL,
+    IsDeleted bit NOT NULL,
+    ModifiedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    ModifiedDate datetime2(7) NULL,
+    TenantId uniqueidentifier NOT NULL
+);
+
+CREATE TABLE #TripDetails
+(
+    Id uniqueidentifier NOT NULL,
+    TripId uniqueidentifier NOT NULL,
+    CompletionType int NULL,
+    TagId nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    ActualWeight float NOT NULL,
+    [Order] int NOT NULL,
+    BinId uniqueidentifier NULL,
+    CreatedDate datetime2(7) NOT NULL,
+    CreatedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    ModifiedDate datetime2(7) NULL,
+    ModifiedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    IsDeleted bit NOT NULL,
+    TenantId uniqueidentifier NOT NULL,
+    StreetWeightPercentage decimal(18,2) NOT NULL,
+    StreetLength float NOT NULL,
+    TagHash AS (CONVERT(varbinary(32), hashbytes('SHA2_256', CONVERT(nvarchar(4000), TagId)))) PERSISTED,
+    ReferenceCode nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    ContractServiceMapGeometryId uniqueidentifier NULL
+);
+
+CREATE TABLE #StartTrips
+(
+    PlanId UNIQUEIDENTIFIER NOT NULL,
+    StartDate DATETIME2(0) NOT NULL
+);
+
+CREATE TABLE #TripDetailsProcessingSummary
+(
+    Id uniqueidentifier NOT NULL,
+    LastCompletion datetime2(7) NULL,
+    ArrivalTime datetime2(7) NULL,
+    TotalDistance decimal(18,2) NOT NULL,
+    WaterUsedLiters decimal(18,2) NOT NULL,
+    SweptAreaSquareMeters decimal(18,2) NOT NULL,
+    TripDetailsId uniqueidentifier NOT NULL,
+    CompletionTime datetime2(7) NULL,
+    TenantId uniqueidentifier NOT NULL,
+    BinLatitude float NOT NULL,
+    BinLongitude float NOT NULL,
+    BinStatusId int NOT NULL,
+    BinWeight float NOT NULL,
+    CompilationReason nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    CompletionOrder int NOT NULL,
+    CompletionPercentage decimal(18,2) NOT NULL,
+    NumberOfLefts int NOT NULL,
+    NumberOfRotation int NOT NULL,
+    TotalOfWasteCollectedFromContainer float NOT NULL,
+    WasteActualWeight float NOT NULL,
+    CreatedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    ModifiedBy nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    ModifiedDate datetime2(7) NULL,
+    TotalGpsDistanceCovered float NOT NULL,
+    Description nvarchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    CreatedDate datetime NULL,
+    CompletionType int NULL,
+    TotalBrushDistanceCovered float NULL,
+    TotalWaterDistanceCovered float NULL,
+    IsSwept bit NOT NULL,
+    ManualLiftReasonLookupId int NULL,
+    TrackingDeviceNumber bigint NOT NULL,
+    VehicleId uniqueidentifier NULL
+);
+
+CREATE TABLE #ExistingTrips
+(
+    PlanId UNIQUEIDENTIFIER NOT NULL,
+    StartDate DATETIME2(0) NOT NULL
+);
+
+CREATE TABLE #TripsToCreate
+(
+    PlanId UNIQUEIDENTIFIER NOT NULL,
+    StartDate DATETIME2(0) NOT NULL
+);
+
+CREATE TABLE #CrewTrip
+(
+    Id UNIQUEIDENTIFIER NOT NULL,
+    TripId UNIQUEIDENTIFIER NOT NULL,
+    CrewId UNIQUEIDENTIFIER NOT NULL,
+    CreatedDate DATETIME2 NOT NULL,
+    CreatedBy NVARCHAR(256) NULL,
+    ModifiedDate DATETIME2 NULL,
+    ModifiedBy NVARCHAR(256) NULL,
+    IsDeleted BIT NOT NULL,
+    TenantId UNIQUEIDENTIFIER NOT NULL
+);
+
+-- ##OperationalPlans INDEX:
+
+CREATE NONCLUSTERED INDEX IX_OperationalPlans_Id
+ON #OperationalPlans (Id);
+
+CREATE NONCLUSTERED INDEX IX_OperationalPlans_IsMonthly
+ON #OperationalPlans (IsMonthly)
+INCLUDE (Id, StartDate, EndDate);
+
+CREATE NONCLUSTERED INDEX IX_OperationalPlans_ContractService
+ON #OperationalPlans (ContractServiceId)
+INCLUDE (Id, ExpectedCoverage, TripDurationHours);
+
+-- #Trips INDEX:
+
+CREATE NONCLUSTERED INDEX IX_Trips_OperationalPlansId
+ON #Trips (OperationalPlansId);
+
+CREATE NONCLUSTERED INDEX IX_Trips_Id
+ON #Trips (Id);
+
+
+CREATE NONCLUSTERED INDEX IX_Trips_TripDate
+ON #Trips (TripDate)
+INCLUDE (OperationalPlansId, Status);
+
+-- TripProcessingSummary INDEX:
+
+CREATE NONCLUSTERED INDEX IX_TripProcessingSummary_TripId
+ON #TripProcessingSummary (TripId);
+
+-- TripLocalization INDEX:
+
+CREATE NONCLUSTERED INDEX IX_TripLocalization_EntityId
+ON #TripLocalization_Localizations (EntityId);
+
+-- TRIP DETAILS INDEX:
+CREATE NONCLUSTERED INDEX IX_TripDetails_TripId
+ON #TripDetails (TripId);
+
+CREATE NONCLUSTERED INDEX IX_TripDetails_TagId_TripId
+ON #TripDetails (TagId, TripId)
+WHERE TagId IS NOT NULL;
+
+CREATE NONCLUSTERED INDEX IX_TripDetails_TagHash
+ON #TripDetails (TagHash);
+
+-- #StartTrips INDEX:
+
+CREATE NONCLUSTERED INDEX IX_StartTrips_PlanId_StartDate
+ON #StartTrips (PlanId, StartDate);
+
+-- ##ExistingTrips INDEX:
+
+CREATE NONCLUSTERED INDEX IX_ExistingTrips_PlanId_StartDate
+ON #ExistingTrips (PlanId, StartDate);
+
+-- ###TripsToCreate INDEX:
+
+CREATE NONCLUSTERED INDEX IX_TripsToCreate_PlanId_StartDate
+ON #TripsToCreate (PlanId, StartDate);
+
+
+-- ####TripDetailsProcessingSummary INDEX:
+
+CREATE NONCLUSTERED INDEX IX_TDPS_TripDetailsId
+ON #TripDetailsProcessingSummary (TripDetailsId);
+
+
+DECLARE @TodayDate       DATE = @FromDate;
+DECLARE @TodayDayOfMonth   INT          = DATEPART(DAY, @TodayDate);
+DECLARE @TodayIdx          INT          = DATEPART(WEEKDAY, @TodayDate) - 1; -- 0..6
+DECLARE @TripCount INT
+DECLARE @TenantId UNIQUEIDENTIFIER='10000001-1001-1001-1001-100000000001'
+-- Clean up temp tables if they already exist
+SELECT @TripCount =COUNT(1) FROM dbo.Trips 
+INSERT INTO #OperationalPlans (
+    Id,
+    ReferenceCode,
+    DisposalPointId,
+    WaterSourceId,
+    OvernightPointId,
+    ContractId,
+    Status,
+    PlanCoverage,
+    IsDeleted,
+    CreatedDate,
+    CreatedBy,
+    ModifiedDate,
+    ModifiedBy,
+    TenantId,
+    EndDate,
+    StartDate,
+    ContractServiceId,
+    TotalTripsCompletionPercentaion,
+    TripDurationHours,
+    ExpectedCoverage,
+    CountActiveTrip,
+    SupervisorId,
+    ContractingCompanyId,
+    MonthlyDays,
+    IsMonthly
+)
+SELECT
+    P.Id,
+    P.ReferenceCode,
+    P.DisposalPointId,
+    P.WaterSourceId,
+    P.OvernightPointId,
+    P.ContractId,
+    P.Status,
+    P.PlanCoverage,
+    P.IsDeleted,
+    P.CreatedDate,
+    P.CreatedBy,
+    P.ModifiedDate,
+    P.ModifiedBy,
+    P.TenantId,
+    P.EndDate,
+    P.StartDate,
+    P.ContractServiceId,
+    P.TotalTripsCompletionPercentaion,
+    P.TripDurationHours, 
+	P.ExpectedCoverage,
+    P.CountActiveTrip,
+    P.SupervisorId,
+    P.ContractingCompanyId,
+    P.MonthlyDays,
+    P.IsMonthly
+FROM dbo.OperationalPlans P 
+INNER JOIN dbo.ContractDetails C ON C.ContractServiceId =P.ContractServiceId
+INNER JOIN (SELECT COUNT(1) ServiceCount,OperationalPlanId FROM dbo.OperationalPlanDetails GROUP BY OperationalPlanId) D ON D.OperationalPlanId = P.Id
+WHERE
+    -- x.CreatedDate <= currentDate
+    CAST (P.CreatedDate AS DATE ) <= @TodayDate
+    AND
+    -- first Where: (weekdays.Any(w.Day == today) OR IsMonthly)
+    (
+        EXISTS (
+            SELECT 1
+            FROM dbo.OperationalPlansDay opd
+            JOIN dbo.WeekDays wd ON wd.Id = opd.WeekDaysId
+            WHERE opd.OperationalPlansId = P.Id
+              AND wd.[Day] = @TodayIdx
+        )
+        OR P.IsMonthly = 1
+    )
+    AND
+    -- second Where:
+    -- (IsMonthly && MonthlyDays contains today day-of-month) OR weekdays not empty
+    (
+        (
+            P.IsMonthly = 1
+            AND P.MonthlyDays IS NOT NULL
+            AND EXISTS (
+                SELECT 1
+                FROM STRING_SPLIT(P.MonthlyDays, ',') s
+            )
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM dbo.OperationalPlansDay opd2
+            WHERE opd2.OperationalPlansId = P.Id
+        )
+    )
+    -- x.OperationalPlanDetails.IsNotNullOrEmpty()
+    AND EXISTS (
+        SELECT 1
+        FROM dbo.OperationalPlanDetails opd3
+        WHERE opd3.OperationalPlanId = P.Id
+    )
+    AND P.IsDeleted = 0 OPTION (MAXDOP 1);
+
+;WITH ValidDays AS
+(
+    SELECT
+        opd.OperationalPlansId AS PlanId,
+        wd.[Day] AS DayIdx
+    FROM dbo.OperationalPlansDay opd
+    JOIN dbo.WeekDays wd ON wd.Id = opd.WeekDaysId
+    WHERE opd.OperationalPlansId IN (
+        SELECT Id FROM #OperationalPlans WHERE IsMonthly = 0
+    )
+    AND opd.IsDeleted = 0
+),
+OffsetsCTE AS
+(
+    SELECT
+        PlanId,
+        ((DayIdx - @TodayIdx + 7) % 7) AS OffsetDays
+    FROM ValidDays
+),
+RankedOffsets AS
+(
+    SELECT
+        o.PlanId,
+        o.OffsetDays,
+        ROW_NUMBER() OVER (
+            PARTITION BY o.PlanId
+            ORDER BY
+                CASE
+                    WHEN o.OffsetDays = 0 THEN 0   -- today first
+                    ELSE 1
+                END,
+                o.OffsetDays                      -- closest future
+        ) AS rn
+    FROM OffsetsCTE o
+)
+INSERT INTO #StartTrips (PlanId, StartDate)
+SELECT
+    p.Id,
+    DATEADD(
+        SECOND, DATEPART(SECOND, p.StartDate),
+        DATEADD(
+            MINUTE, DATEPART(MINUTE, p.StartDate),
+            DATEADD(
+                HOUR, DATEPART(HOUR, p.StartDate),
+                DATEADD(
+                    DAY, r.OffsetDays,
+                    CAST(@TodayDate AS DATETIME2(0))
+                )
+            )
+        )
+    )
+FROM #OperationalPlans p
+JOIN RankedOffsets r ON r.PlanId = p.Id
+WHERE p.IsMonthly = 0
+AND (
+        -- today only if not passed
+        (r.OffsetDays = 0 
+		AND CAST(p.StartDate AS TIME) >= CAST(GETDATE() AS TIME)
+		)
+     OR
+        -- future always allowed
+        (r.OffsetDays > 0)
+)
+AND r.rn <= 2 OPTION (MAXDOP 1);
+
+INSERT INTO #StartTrips (PlanId, StartDate)
+SELECT
+    p.Id,
+    DATEADD(SECOND, DATEPART(SECOND, p.StartDate),
+    DATEADD(MINUTE, DATEPART(MINUTE, p.StartDate),
+    DATEADD(HOUR,   DATEPART(HOUR,   p.StartDate),
+        CAST(DATEFROMPARTS(YEAR(@TodayDate), MONTH(@TodayDate), CAST(s.value AS INT)) AS DATETIME2(0))
+    )))
+FROM #OperationalPlans p
+CROSS APPLY STRING_SPLIT(p.MonthlyDays, ',') s
+WHERE p.IsMonthly = 1
+  AND CAST(s.value AS INT) >= @TodayDayOfMonth  OPTION (MAXDOP 1);
+
+
+INSERT INTO #ExistingTrips (PlanId, StartDate)
+SELECT
+    t.OperationalPlansId,
+    t.StartTrip
+FROM dbo.Trips t
+JOIN #StartTrips s
+    ON  s.PlanId    = t.OperationalPlansId
+    AND s.StartDate = t.StartTrip 
+	AND t.IsDeleted=0;
+	INSERT INTO #TripsToCreate ( PlanId, StartDate ) 
+SELECT
+    s.PlanId,
+    s.StartDate
+FROM #StartTrips s
+LEFT JOIN #ExistingTrips e
+    ON  e.PlanId    = s.PlanId
+    AND e.StartDate = s.StartDate
+WHERE e.PlanId IS NULL;
+--SELECT * FROM #TripsToCreate
+INSERT INTO #Trips
+(
+    Id,
+    OperationalPlansId,
+    StartTrip,
+    EndTrip,
+    CreatedDate,
+    CreatedBy,
+    ModifiedDate,
+    ModifiedBy,
+    IsDeleted,
+    TenantId,
+    DisposalPointId,
+    WaterSourceId,
+    DriverId,
+    OvernightPointId,
+    VehicleId,
+    TripDate,
+    ReferenceCode,
+    Status,
+    SupervisorId,
+    OperationManagerId,
+    VehicleId1
+) 
+SELECT 
+NEWID(),
+A.PlanId,
+A.StartDate
+,DATEADD(
+    SECOND, DATEPART(SECOND, B.EndDate),
+    DATEADD(
+        MINUTE, DATEPART(MINUTE, B.EndDate),
+        DATEADD(
+            HOUR, DATEPART(HOUR, B.EndDate),
+            DATEADD(
+                DAY,
+                -- if end time < start time, it crosses midnight → add 1 day
+                CASE 
+                    WHEN CAST(B.EndDate AS TIME) < CAST(B.StartDate AS TIME) 
+                    THEN 1 ELSE 0 
+                END,
+                CAST(CAST(A.StartDate AS DATE) AS DATETIME2(0))
+            )
+        )
+    )
+),
+GETDATE(),
+'SQLScript',
+NULL,
+NULL,
+0,
+B.TenantId,
+B.DisposalPointId,
+B.WaterSourceId,
+D.DriverId,
+B.OvernightPointId,
+V.VehicleId,
+CAST(CAST(A.StartDate AS DATE) AS DATETIME2 ),
+'TRI'+'-'+CAST(DATEPART(YEAR,A.StartDate) AS VARCHAR(67))+CAST(DATEPART(MONTH,A.StartDate) AS VARCHAR(67))+'-'+CAST(@TripCount + ROW_NUMBER()OVER(ORDER BY B.Id) AS VARCHAR(50)),
+1,
+B.SupervisorId,
+NULL,
+NULL
+FROM #TripsToCreate A
+INNER JOIN #OperationalPlans B ON B.Id = A.PlanId
+LEFT JOIN DriverOperationalPlan D 
+    ON D.OperationalPlansId = B.Id
+   AND D.IsMain = 1
+   AND D.IsDeleted = 0
+LEFT JOIN dbo.VehicleOperationalPlan V 
+    ON V.OperationalPlansId = B.Id
+   AND V.IsMain = 1
+   AND V.IsDeleted = 0--SELECT * FROM #Trips
+INSERT INTO #TripProcessingSummary
+(
+    Id,
+    TotalDistance,
+    IsWaterUsed,
+    ExpectedCovarge,
+    IsFinalized,
+    ActualCovarge,
+    TripId,
+    IsDeleted,
+    CreatedDate,
+    CreatedBy,
+    ModifiedDate,
+    ModifiedBy,
+    TenantId,
+    ActualEndTrip,
+    ActualStartTrip,
+    CompletionPercentage,
+    DischargeStatus,
+    IsBrushUsed,
+    Status,
+    ActualStartTripLatitude,
+    ActualStartTripLongitude
+)
+SELECT NEWID(),0,0,A.ExpectedCoverage,0,0,T.Id,0,GETDATE(),'SQLScript',NULL,NULL,A.TenantId,NULL,NULL,0,2,0,5,NULL,NULL
+FROM #OperationalPlans A
+INNER JOIN #Trips T ON T.OperationalPlansId = A.Id  OPTION (MAXDOP 1);
+
+--SELECT * FROM #TripProcessingSummary
+INSERT INTO #TripLocalization_Localizations
+(
+    EntityId,
+    LanguageLocale,
+    [Description],
+    CreatedBy,
+    CreatedDate,
+    IsDeleted,
+    ModifiedBy,
+    ModifiedDate,
+    TenantId
+) 
+SELECT T.Id,B.LanguageLocale,ISNULL(B.Description,'')+' - '+W.[Name]+' - '+FORMAT(T.StartTrip, 'yyyy-MM-dd hh:mm'),'SQLScript',GETDATE(),0,NULL,NULL,A.TenantId
+FROM #OperationalPlans A
+INNER JOIN dbo.OperationPlan_Localizations B ON B.EntityId = A.Id
+INNER JOIN #Trips T ON T.OperationalPlansId = A.Id
+INNER JOIN dbo.WeekDays W ON W.[Day] = DATEPART(WEEKDAY,T.TripDate)-1 
+ 
+ --SELECT * FROM #TripLocalization_Localizations
+INSERT INTO #TripDetails
+(
+    Id,
+    TripId,
+    CompletionType,
+    TagId,
+    ActualWeight,
+    [Order],
+    BinId,
+    CreatedDate,
+    CreatedBy,
+    ModifiedDate,
+    ModifiedBy,
+    IsDeleted,
+    TenantId,
+    StreetWeightPercentage,
+    StreetLength,
+    ReferenceCode,
+    ContractServiceMapGeometryId
+) 
+SELECT NEWID(),T.Id,NULL,B.TagId,0,B.[Order],B.BinId,GETDATE(),'SQLScript',NULL,NULL,0,A.TenantId,B.StreetWeightPercentage,
+IIF(  B.[Length]>0, B.[Length] * IIF(C.NumberOfRepetitionsPerDay >0,C.NumberOfRepetitionsPerDay,1),0) ,
+ G.ReferenceCode,G.Id
+FROM  #OperationalPlans A
+INNER JOIN #Trips T ON T.OperationalPlansId = A.Id
+INNER JOIN dbo.OperationalPlanDetails B ON B.OperationalPlanId = A.Id
+INNER JOIN dbo.ContractDetails C ON C.ContractServiceId =A.ContractServiceId
+LEFT OUTER JOIN   dbo.ContractServiceMapGeometry G ON G.Id = B.ContractServiceMapGeometryId
+ OPTION (MAXDOP 1);
+INSERT INTO #TripDetailsProcessingSummary
+(
+    Id,
+    LastCompletion,
+    ArrivalTime,
+    TotalDistance,
+    WaterUsedLiters,
+    SweptAreaSquareMeters,
+    TripDetailsId,
+    CompletionTime,
+    TenantId,
+    BinLatitude,
+    BinLongitude,
+    BinStatusId,
+    BinWeight,
+    CompilationReason,
+    CompletionOrder,
+    CompletionPercentage,
+    NumberOfLefts,
+    NumberOfRotation,
+    TotalOfWasteCollectedFromContainer,
+    WasteActualWeight,
+    CreatedBy,
+    ModifiedBy,
+    ModifiedDate,
+    TotalGpsDistanceCovered,
+    Description,
+    CreatedDate,
+    CompletionType,
+    TotalBrushDistanceCovered,
+    TotalWaterDistanceCovered,
+    IsSwept,
+    ManualLiftReasonLookupId,
+    TrackingDeviceNumber,
+    VehicleId
+	) 
+SELECT NEWID(),NULL,NULL,0,0,0,TD.Id,NULL,A.TenantId,ISNULL(Bin.Latitude,0),ISNULL(Bin.Longitude,0),1,0,NULL,1,0,0,0,0,0,'SQLScript' ,NULL,NULL,0,NULL,GETDATE(),1,0,0,0,NULL,0,NULL
+FROM   #OperationalPlans A
+INNER JOIN #Trips T ON T.OperationalPlansId = A.Id
+INNER JOIN #TripDetails Td ON Td.TripId = T.Id
+--INNER JOIN dbo.OperationalPlanDetails B ON B.OperationalPlanId = A.Id
+LEFT OUTER JOIN  dbo.Bins Bin  ON Bin.Id = Td.BinId
+ OPTION (MAXDOP 1);
+
+ 
+
+
+SELECT 'Duplicated Tags in case any';
+;WITH cte AS (
+    SELECT
+        TagId,
+        TripId,
+        ROW_NUMBER() OVER (
+            PARTITION BY TagId, TripId
+            ORDER BY Id
+        ) AS rn
+    FROM #TripDetails
+    WHERE TagId IS NOT NULL
+)
+SELECT *
+FROM cte
+WHERE rn > 1;
+
+  SELECT 'to create weekly'
+SELECT * FROM #TripsToCreate xx
+INNER JOIN dbo.OperationalPlans op ON op.id=xx.PlanId
+WHERE op.IsMonthly=0  
+ORDER BY op.CreatedDate
+
+
+
+  SELECT 'to create monthly'
+SELECT * FROM #TripsToCreate xx
+INNER JOIN dbo.OperationalPlans op ON op.id=xx.PlanId
+WHERE op.IsMonthly=1  
+ORDER BY op.CreatedDate
+
+ INSERT INTO dbo.Trips
+(
+    Id,
+    OperationalPlansId,
+    StartTrip,
+    EndTrip,
+    CreatedDate,
+    CreatedBy,
+    ModifiedDate,
+    ModifiedBy,
+    IsDeleted,
+    TenantId,
+    DisposalPointId,
+    WaterSourceId,
+    DriverId,
+    OvernightPointId,
+    VehicleId,
+    TripDate,
+    ReferenceCode,
+    Status,
+    SupervisorId,
+    OperationManagerId,
+    VehicleId1
+) SELECT Id,
+         OperationalPlansId,
+         StartTrip,
+         EndTrip,
+         CreatedDate,
+         CreatedBy,
+         ModifiedDate,
+         ModifiedBy,
+         IsDeleted,
+         TenantId,
+         DisposalPointId,
+         WaterSourceId,
+         DriverId,
+         OvernightPointId,
+         VehicleId,
+         TripDate,
+         ReferenceCode,
+         Status,
+         SupervisorId,
+         OperationManagerId,
+         VehicleId1 FROM #Trips 
+		 SELECT	 'dbo.Trips'
+
+  INSERT INTO dbo.TripProcessingSummary
+	(
+	    Id,
+	    TotalDistance,
+	    IsWaterUsed,
+	    ExpectedCovarge,
+	    IsFinalized,
+	    ActualCovarge,
+	    TripId,
+	    IsDeleted,
+	    CreatedDate,
+	    CreatedBy,
+	    ModifiedDate,
+	    ModifiedBy,
+	    TenantId,
+	    ActualEndTrip,
+	    ActualStartTrip,
+	    CompletionPercentage,
+	    DischargeStatus,
+	    IsBrushUsed,
+	    Status,
+	    ActualStartTripLatitude,
+	    ActualStartTripLongitude
+	) SELECT Id,
+             TotalDistance,
+             IsWaterUsed,
+             ExpectedCovarge,
+             IsFinalized,
+             ActualCovarge,
+             TripId,
+             IsDeleted,
+             CreatedDate,
+             CreatedBy,
+             ModifiedDate,
+             ModifiedBy,
+             TenantId,
+             ActualEndTrip,
+             ActualStartTrip,
+             CompletionPercentage,
+             DischargeStatus,
+             IsBrushUsed,
+             Status,
+             ActualStartTripLatitude,
+             ActualStartTripLongitude FROM #TripProcessingSummary
+			 SELECT 'TripProcessingSummary'
+  INSERT INTO dbo.TripDetails
+  (
+      Id,
+      TripId,
+      CompletionType,
+      TagId,
+      ActualWeight,
+      [Order],
+      BinId,
+      CreatedDate,
+      CreatedBy,
+      ModifiedDate,
+      ModifiedBy,
+      IsDeleted,
+      TenantId,
+      StreetWeightPercentage,
+      StreetLength,
+      ReferenceCode,
+      ContractServiceMapGeometryId
+  ) SELECT Id,
+           TripId,
+           CompletionType,
+           TagId,
+           ActualWeight,
+           [Order],
+           BinId,
+           CreatedDate,
+           CreatedBy,
+           ModifiedDate,
+           ModifiedBy,
+           IsDeleted,
+           TenantId,
+           StreetWeightPercentage,
+           StreetLength, 
+           ReferenceCode,
+           ContractServiceMapGeometryId FROM #TripDetails 
+		   SELECT 'TripDetails'
+  INSERT INTO dbo.TripDetailsProcessingSummary
+		   (
+		       Id,
+		       LastCompletion,
+		       ArrivalTime,
+		       TotalDistance,
+		       WaterUsedLiters,
+		       SweptAreaSquareMeters,
+		       TripDetailsId,
+		       CompletionTime,
+		       TenantId,
+		       BinLatitude,
+		       BinLongitude,
+		       BinStatusId,
+		       BinWeight,
+		       CompilationReason,
+		       CompletionOrder,
+		       CompletionPercentage,
+		       NumberOfLefts,
+		       NumberOfRotation,
+		       TotalOfWasteCollectedFromContainer,
+		       WasteActualWeight,
+		       CreatedBy,
+		       ModifiedBy,
+		       ModifiedDate,
+		       TotalGpsDistanceCovered,
+		       Description,
+		       CreatedDate,
+		       CompletionType,
+		       TotalBrushDistanceCovered,
+		       TotalWaterDistanceCovered,
+		       IsSwept,
+		       ManualLiftReasonLookupId,
+		       TrackingDeviceNumber,
+		       VehicleId
+		   ) SELECT Id,
+                    LastCompletion,
+                    ArrivalTime,
+                    TotalDistance,
+                    WaterUsedLiters,
+                    SweptAreaSquareMeters,
+                    TripDetailsId,
+                    CompletionTime,
+                    TenantId,
+                    BinLatitude,
+                    BinLongitude,
+                    BinStatusId,
+                    BinWeight,
+                    CompilationReason,
+                    CompletionOrder,
+                    CompletionPercentage,
+                    NumberOfLefts,
+                    NumberOfRotation,
+                    TotalOfWasteCollectedFromContainer,
+                    WasteActualWeight,
+                    CreatedBy,
+                    ModifiedBy,
+                    ModifiedDate,
+                    TotalGpsDistanceCovered,
+                    Description,
+                    CreatedDate,
+                    CompletionType,
+                    TotalBrushDistanceCovered,
+                    TotalWaterDistanceCovered,
+                    IsSwept,
+                    ManualLiftReasonLookupId,
+                    TrackingDeviceNumber,
+                    VehicleId FROM #TripDetailsProcessingSummary  
+					SELECT 'TripDetailsProcessingSummary'
+  INSERT INTO dbo.TripLocalization_Localizations
+  (
+      EntityId,
+      LanguageLocale,
+      Description,
+      CreatedBy,
+      CreatedDate,
+      IsDeleted,
+      ModifiedBy,
+      ModifiedDate,
+      TenantId
+  )SELECT EntityId,
+          LanguageLocale,
+          Description,
+          CreatedBy,
+          CreatedDate,
+          IsDeleted,
+          ModifiedBy,
+          ModifiedDate,
+          TenantId 
+		  FROM #TripLocalization_Localizations
+		  SELECT 'TripLocalization_Localizations'
+		
+		
+;WITH TripCounts AS (
+    SELECT OperationalPlansId, COUNT(*) AS TripCount
+    FROM trips
+    WHERE StartTrip <= GETDATE()
+    GROUP BY OperationalPlansId
+)
+UPDATE op
+SET op.CountActiveTrip = ISNULL(tc.TripCount, 0)  
+FROM dbo.OperationalPlans op
+INNER JOIN #StartTrips xxx ON xxx.PlanId = op.id
+LEFT JOIN TripCounts tc ON tc.OperationalPlansId = op.Id;
+		  SELECT 'update opertional plan active count trip'
+
+ UPDATE  dbo.Trips SET [Status] =3
+ WHERE  [Status] =1 AND  DATEADD(HOUR,-1,StartTrip) <= GETDATE()
+
+
+--	--inesrt crews for trip
+INSERT INTO #CrewTrip (Id, TripId, CrewId,IsDeleted,CreatedDate,CreatedBy,TenantId)
+SELECT
+    NEWID() AS Id,     -- GUID generated here
+    t.Id,
+    opc.CrewId,
+	0,
+	GETDATE(),
+	'sql_Script',
+	@TenantId
+FROM dbo.Trips t
+INNER JOIN dbo.CrewOperationalPlans opc
+    ON opc.OperationalPlansId = t.OperationalPlansId AND t.IsDeleted=0
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.CrewTrip tc
+    WHERE tc.TripId = t.Id
+      AND tc.CrewId = opc.CrewId 
+	  AND IsDeleted=0
+);
+
+INSERT INTO dbo.CrewTrip
+(
+    Id,
+    TripId,
+    CrewId,
+    IsDeleted,
+    CreatedDate,
+    CreatedBy,
+    TenantId
+)
+SELECT
+    ct.Id,
+    ct.TripId,
+    ct.CrewId,
+    ct.IsDeleted,
+    ct.CreatedDate,
+    ct.CreatedBy,
+    ct.TenantId
+FROM #CrewTrip ct
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM dbo.CrewTrip tc
+    WHERE tc.TripId = ct.TripId
+      AND tc.CrewId = ct.CrewId
+      AND tc.IsDeleted = 0
+);
+
+
+		  SELECT 'inesrted into crew trip'
+
+
+ UPDATE  dbo.Trips SET [Status] =3
+ WHERE  [Status] =1 AND  DATEADD(HOUR,-1,StartTrip) <= GETDATE()
+ 
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    -- Rollback if something failed
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+
+    -- Print detailed error information
+    PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS VARCHAR(10));
+    PRINT 'Error Severity: ' + CAST(ERROR_SEVERITY() AS VARCHAR(10));
+    PRINT 'Error State: ' + CAST(ERROR_STATE() AS VARCHAR(10));
+    PRINT 'Error Line: ' + CAST(ERROR_LINE() AS VARCHAR(10));
+    PRINT 'Error Procedure: ' + ISNULL(ERROR_PROCEDURE(), 'N/A');
+    PRINT 'Error Message: ' + ERROR_MESSAGE();
+	IF OBJECT_ID('tempdb..#TripDetailsProcessingSummary') IS NOT NULL DROP TABLE #TripDetailsProcessingSummary;
+IF OBJECT_ID('tempdb..#TripDetails') IS NOT NULL DROP TABLE #TripDetails;
+IF OBJECT_ID('tempdb..#TripLocalization_Localizations') IS NOT NULL DROP TABLE #TripLocalization_Localizations;
+IF OBJECT_ID('tempdb..#TripProcessingSummary') IS NOT NULL DROP TABLE #TripProcessingSummary;
+IF OBJECT_ID('tempdb..#TripsToCreate') IS NOT NULL DROP TABLE #TripsToCreate;
+IF OBJECT_ID('tempdb..#ExistingTrips') IS NOT NULL DROP TABLE #ExistingTrips;
+IF OBJECT_ID('tempdb..#StartTrips') IS NOT NULL DROP TABLE #StartTrips;
+IF OBJECT_ID('tempdb..#OperationalPlans') IS NOT NULL DROP TABLE #OperationalPlans;
+IF OBJECT_ID('tempdb..#Trips') IS NOT NULL DROP TABLE #Trips;
+IF OBJECT_ID('tempdb..#CrewTrip') IS NOT NULL DROP TABLE #CrewTrip;
+    -- Optionally re-raise the error
+    -- THROW; -- Uncomment if you want the SP to fail with the original error
+END CATCH
+END
+
+
